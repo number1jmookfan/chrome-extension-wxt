@@ -17,7 +17,7 @@ import {
 
 // main function
 export default defineBackground(() => {
-  const SETUP_SESSION_URL = import.meta.env.PLASMO_PUBLIC_SETUP_SESSION_URL
+  const SETUP_SESSION_URL = import.meta.env.WXT_PUBLIC_SETUP_SESSION_URL
 
   let sessionInitialized = false
   let globalSessionId = "no-session-id"
@@ -50,10 +50,10 @@ export default defineBackground(() => {
   })
 
   const app = initializeApp({
-    apiKey: import.meta.env.PLASMO_PUBLIC_FIREBASE_API_KEY,
-    projectId: import.meta.env.PLASMO_PUBLIC_FIREBASE_PROJECT_ID,
-    appId: import.meta.env.PLASMO_PUBLIC_FIREBASE_APP_ID,
-    measurementId: import.meta.env.PLASMO_PUBLIC_FIREBASE_MEASUREMENT_ID
+    apiKey: import.meta.env.WXT_PUBLIC_FIREBASE_API_KEY,
+    projectId: import.meta.env.WXT_PUBLIC_FIREBASE_PROJECT_ID,
+    appId: import.meta.env.WXT_PUBLIC_FIREBASE_APP_ID,
+    measurementId: import.meta.env.WXT_PUBLIC_FIREBASE_MEASUREMENT_ID
   })
   const db = getFirestore(app)
 

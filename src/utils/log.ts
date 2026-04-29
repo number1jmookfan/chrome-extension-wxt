@@ -12,11 +12,11 @@ export function remoteLog(
   level: LogLevel = "info",
   attributes: Record<string, unknown> = {}
 ) {
-  if (import.meta.env.NODE_ENV === "development")
+  if (import.meta.env.DEV)
     console.log(
       "[Chrome Extension]",
       msg,
       Object.keys(attributes).length > 0 ? attributes : ""
     )
-  // Sentry.logger[level](`[Chrome Extension] ${msg}`, attributes)
+  Sentry.logger[level](`[Chrome Extension] ${msg}`, attributes)
 }

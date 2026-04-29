@@ -57,7 +57,7 @@ export async function sendToPageVisitAPI(data: PageVisitApiReq) {
 }
 
 export async function captureVisibleScreen() {
-  const screenshotDataUrl = await browser.tabs.captureVisibleTab(null, {
+  const screenshotDataUrl = await browser.tabs.captureVisibleTab({
     format: "png",
     quality: 80
   })
@@ -110,6 +110,9 @@ export async function sendToCaptureAPI({
 // ======
 export async function captureFullPage(tabId: number | null) {
   try {
+    if (!tabId) {
+      throw new Error("tabId is null")
+    }
     await browser.tabs.sendMessage(tabId, { action: "waitForPageLoad" })
 
     await browser.tabs.sendMessage(tabId, { action: "hideFixedElements" })
@@ -134,7 +137,7 @@ export async function captureFullPage(tabId: number | null) {
 
       await new Promise((resolve) => setTimeout(resolve, 400))
 
-      const screenshot = await browser.tabs.captureVisibleTab(null, {
+      const screenshot = await browser.tabs.captureVisibleTab({
         format: "png"
       })
       screenshots.push({
@@ -166,6 +169,9 @@ export async function captureFullPage(tabId: number | null) {
       error: message
     })
     try {
+      if (!tabId) {
+        throw new Error("tabId is null")
+      }
       await browser.tabs.sendMessage(tabId, { action: "restoreFixedElements" })
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unknown error"
@@ -208,9 +214,14 @@ export async function sendDocToServer(
   }
 }
 
-async function stitchScreenshots(screenshots, canvasWidth, canvasHeight, dpr) {
+async function stitchScreenshots(
+  screenshots: { data: string; position: number; height: number }[],
+  canvasWidth: number,
+  canvasHeight: number,
+  dpr: number
+) {
   const canvas = new OffscreenCanvas(canvasWidth, canvasHeight)
-  const ctx = canvas.getContext("2d")
+  const ctx = canvas.getContext("2d")!
 
   for (const screenshot of screenshots) {
     const response = await fetch(screenshot.data)
