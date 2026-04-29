@@ -146,7 +146,12 @@ export default defineBackground(() => {
           let blob = pending?.blob
           if (!blob) {
             remoteLog("No pre-fetched blob, fetching now", "info", { url })
-            const response = await fetch(url, { credentials: "include" })
+            const response = await fetch(url, {
+              headers: new Headers({
+                "ngrok-skip-browser-warning": "69420"
+              }),
+              credentials: "include"
+            })
             blob = await response.blob()
           }
 
@@ -356,6 +361,9 @@ export default defineBackground(() => {
         if (!isDoc) {
           try {
             const resp = await fetch(tab.url, {
+              headers: new Headers({
+                "ngrok-skip-browser-warning": "69420"
+              }),
               method: "HEAD",
               credentials: "include"
             })
@@ -377,6 +385,9 @@ export default defineBackground(() => {
         if (filename === "document.pdf") {
           try {
             const resp = await fetch(tab.url, {
+              headers: new Headers({
+                "ngrok-skip-browser-warning": "69420"
+              }),
               method: "HEAD",
               credentials: "include"
             })

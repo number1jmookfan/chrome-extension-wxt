@@ -45,6 +45,9 @@ export async function sendToPageVisitAPI(data: PageVisitApiReq) {
   }
   try {
     await fetch(PAGE_VISIT_API_URL, {
+      headers: new Headers({
+        "ngrok-skip-browser-warning": "69420"
+      }),
       method: "POST",
       body: JSON.stringify(data)
     })
@@ -67,6 +70,9 @@ export async function captureVisibleScreen() {
 export async function sendToBrowserDataAPI(data: BrowserDataApiReq) {
   try {
     await fetch(BROWSER_DATA_API_URL, {
+      headers: new Headers({
+        "ngrok-skip-browser-warning": "69420"
+      }),
       method: "POST",
       body: JSON.stringify(data)
     })
@@ -96,6 +102,9 @@ export async function sendToCaptureAPI({
 
     // TODO check 404 response
     await fetch(CAPTURE_API_URL, {
+      headers: new Headers({
+        "ngrok-skip-browser-warning": "69420"
+      }),
       method: "POST",
       body: JSON.stringify(req)
     })
@@ -199,6 +208,9 @@ export async function sendDocToServer(
     formData.append("filename", metadata.filename)
 
     const resp = await fetch(DOC_UPLOAD_API_URL, {
+      headers: new Headers({
+        "ngrok-skip-browser-warning": "69420"
+      }),
       method: "POST",
       body: formData
     })
@@ -224,7 +236,11 @@ async function stitchScreenshots(
   const ctx = canvas.getContext("2d")!
 
   for (const screenshot of screenshots) {
-    const response = await fetch(screenshot.data)
+    const response = await fetch(screenshot.data, {
+      headers: new Headers({
+        "ngrok-skip-browser-warning": "69420"
+      })
+    })
     const blob = await response.blob()
     const imageBitmap = await createImageBitmap(blob)
 
