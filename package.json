@@ -15,13 +15,18 @@
     "postinstall": "wxt prepare"
   },
   "dependencies": {
+    "@sentry/browser": "^10.50.0",
+    "@wxt-dev/browser": "^0.1.40",
+    "firebase": "^12.12.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
+    "@ianvs/prettier-plugin-sort-imports": "4.4.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@wxt-dev/module-react": "^1.1.5",
+    "prettier": "3.5.3",
     "typescript": "^5.9.3",
     "wxt": "^0.20.25"
   }
