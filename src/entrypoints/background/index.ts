@@ -63,7 +63,7 @@ export default defineBackground(() => {
     sender: Browser.runtime.MessageSender,
     sendResponse: (response?: any) => void
   ) {
-    remoteLog("received content.js/popup.js message")
+    remoteLog("received content.js/popup.js message: " + message.action)
 
     if (message.action === "recorder:start") {
       startRecording()

@@ -9,7 +9,7 @@ declare global {
 }
 
 export default defineContentScript({
-  matches: ["*://*/*"],
+  matches: ["<all_urls>"],
   runAt: "document_start",
   main(ctx) {
     remoteLog("content script init", "info")
