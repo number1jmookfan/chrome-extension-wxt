@@ -18,6 +18,7 @@ import {
 // main function
 export default defineBackground(() => {
   const SETUP_SESSION_URL = import.meta.env.WXT_PUBLIC_SETUP_SESSION_URL
+  console.log(SETUP_SESSION_URL)
 
   let sessionInitialized = false
   let globalSessionId = "no-session-id"

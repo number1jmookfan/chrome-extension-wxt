@@ -13,6 +13,7 @@ export async function sendMessagetoActiveTab(message: unknown) {
   const activeTab = await getActiveTab()
   if (activeTab?.id) {
     try {
+      remoteLog("active tab id: " + activeTab.id + " , Message: " + message)
       await browser.tabs.sendMessage(activeTab.id, message)
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error"

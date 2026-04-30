@@ -9,7 +9,8 @@ declare global {
 }
 
 export default defineContentScript({
-  matches: ["<all_urls>"],
+  matches: ["*://*/*"],
+  runAt: "document_start",
   main(ctx) {
     remoteLog("content script init", "info")
     injectKioskPageOverrides()
@@ -17,7 +18,13 @@ export default defineContentScript({
 
     // Use MutationObserver to detect dynamically added password fields
     const observer = new MutationObserver(findPasswordInputs)
-    observer.observe(document.body, { childList: true, subtree: true })
+    document.addEventListener(
+      "DOMContentLoaded",
+      () => {
+        observer.observe(document.body, { childList: true, subtree: true })
+      },
+      { once: true }
+    )
 
     function findPasswordInputs() {
       if (foundPasswordInputs) return
