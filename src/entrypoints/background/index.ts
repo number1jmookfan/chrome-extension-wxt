@@ -1,3 +1,6 @@
+import { RECORDER_SERVICE_KEY } from "@/utils/proxy-service-keys"
+import { RecorderService } from "@/utils/services"
+import { registerService } from "@webext-core/proxy-service"
 import { initializeApp } from "firebase/app"
 import { getFirestore } from "firebase/firestore"
 import { browser, type Browser } from "wxt/browser"
@@ -19,6 +22,10 @@ import {
 export default defineBackground(() => {
   const SETUP_SESSION_URL = import.meta.env.WXT_PUBLIC_SETUP_SESSION_URL
   console.log(SETUP_SESSION_URL)
+
+  // activate when recorder services are ready
+  // const recorderService = new RecorderService()
+  // registerService(RECORDER_SERVICE_KEY, recorderService)
 
   let sessionInitialized = false
   let globalSessionId = "no-session-id"
@@ -65,6 +72,7 @@ export default defineBackground(() => {
   ) {
     remoteLog("received content.js/popup.js message: " + message.action)
 
+    //popup
     if (message.action === "recorder:start") {
       startRecording()
         .then(() => sendResponse({ ok: true }))
@@ -72,6 +80,7 @@ export default defineBackground(() => {
       return true
     }
 
+    //popup
     if (message.action === "recorder:stop") {
       recordingActive = false
       recordingTabId = null
@@ -81,6 +90,7 @@ export default defineBackground(() => {
       return false
     }
 
+    //popup
     if (message.action === "recorder:getStatus") {
       browser.storage.local.get(["recorderActive"], (result) => {
         sendResponse({ recording: result.recorderActive === true })
@@ -88,6 +98,7 @@ export default defineBackground(() => {
       return true
     }
 
+    //content
     if (message.action === "recorder:event" && message.payload) {
       const { kind, selector, xpath, url, value, description } = message.payload
       console.log("recorder:event", message.payload)
@@ -109,6 +120,7 @@ export default defineBackground(() => {
       return false
     }
 
+    //popup
     if (message.action === "recorder:getRecording") {
       const recording: Recording = {
         steps: [...recordedSteps],
@@ -119,6 +131,7 @@ export default defineBackground(() => {
       return false
     }
 
+    //popup
     if (message.action === "storage:getExport") {
       ;(async () => {
         try {
@@ -136,6 +149,7 @@ export default defineBackground(() => {
       return true
     }
 
+    //content
     if (message.action === "doc:confirm") {
       ;(async () => {
         try {

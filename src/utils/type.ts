@@ -175,3 +175,26 @@ export interface TabChangeInfo {
    */
   title?: string | undefined
 }
+
+export type RecorderEvent =
+  | {
+      kind: "fill" | "select"
+      selector: string
+      xpath: string
+      value: string
+      url: string
+      description?: string
+    }
+  | {
+      kind: "click"
+      selector: string
+      xpath: string
+      value?: string
+      url: string
+      description?: string
+    }
+
+export type DocConfirmPayload = {
+  url: string
+  filename: string
+}
