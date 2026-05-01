@@ -1,6 +1,8 @@
 import { injectKioskPageOverrides } from "./kiosk"
 import { startRecording, stopRecording } from "./recorder"
 
+import "@/assets/tailwind.css"
+
 // Extend Window interface to include our custom property
 declare global {
   interface Window {
