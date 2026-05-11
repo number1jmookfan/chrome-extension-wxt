@@ -409,6 +409,7 @@ export default defineBackground(() => {
   }
 
   async function injectDocModal(tabId: number, url: string, filename: string) {
+    remoteLog("INJECTDOCMODAL", "info")
     try {
       await browser.scripting.executeScript({
         target: { tabId },
@@ -611,7 +612,7 @@ export default defineBackground(() => {
 
     // Get the first pending confirmation (most recent)
     const [url, pending] = [...pendingDocConfirmations.entries()].pop()!
-
+    remoteLog("ACTIVATING DOC MODAL - BACKGROUND.TS")
     try {
       await browser.tabs.sendMessage(activeInfo.tabId, {
         action: "doc:showConfirmation",
@@ -619,6 +620,7 @@ export default defineBackground(() => {
       })
     } catch {
       try {
+        remoteLog("INJECTING DOC MODAL")
         await injectDocModal(activeInfo.tabId, url, pending.filename)
       } catch {
         // Tab may not support injection (e.g. browser://)

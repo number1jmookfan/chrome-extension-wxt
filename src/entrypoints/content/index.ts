@@ -1,7 +1,7 @@
+import "@/assets/tailwind.css"
+
 import { injectKioskPageOverrides } from "./kiosk"
 import { startRecording, stopRecording } from "./recorder"
-
-import "@/assets/tailwind.css"
 
 // Extend Window interface to include our custom property
 declare global {
@@ -186,6 +186,7 @@ export default defineContentScript({
         }
 
         if (request.action === "doc:showConfirmation") {
+          remoteLog("SHOWING DOC CONFIRMATION MODAL")
           showDocConfirmationModal(
             request.payload.filename,
             request.payload.url
@@ -246,7 +247,7 @@ export default defineContentScript({
 
     const SVG_UPLOAD_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 15V19C21 20.1 20.1 21 19 21H5C3.9 21 3 20.1 3 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 8L12 3L7 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 3V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
 
-    const SVG_SPINNER = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="animation:__inklink_spin__ 1s linear infinite;"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2.5" opacity="0.25"/><path d="M12 2C6.5 2 2 6.5 2 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>`
+    const SVG_SPINNER = `<svg class="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2.5" opacity="0.25"/><path d="M12 2C6.5 2 2 6.5 2 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>`
 
     function injectFont() {
       if (document.getElementById(FONT_ID)) return
@@ -256,11 +257,6 @@ export default defineContentScript({
       link.href =
         "https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap"
       document.head.appendChild(link)
-
-      const keyframes = document.createElement("style")
-      keyframes.textContent =
-        "@keyframes __inklink_spin__{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}"
-      document.head.appendChild(keyframes)
     }
 
     function updateDocModalFilename(newFilename: string) {
@@ -299,55 +295,20 @@ export default defineContentScript({
 
       badge = document.createElement("div")
       badge.id = BADGE_ID
-      Object.assign(badge.style, {
-        position: "fixed",
-        bottom: "24px",
-        right: "24px",
-        zIndex: "2147483646",
-        display: "flex",
-        alignItems: "center",
-        gap: "12px",
-        background: "#ffffff",
-        borderRadius: "12px",
-        padding: "12px 16px",
-        boxShadow: "0 4px 24px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.05)",
-        fontFamily: "'Outfit', sans-serif",
-        fontSize: "13px",
-        fontWeight: "500",
-        color: "#0f172a",
-        transition: "opacity 0.2s ease"
-      })
+      badge.className =
+        "fixed bottom-6 right-6 z-[2147483646] flex items-center gap-3 rounded-xl border border-black/5 bg-white px-4 py-3 font-['Outfit',sans-serif] text-[13px] font-medium text-slate-900 shadow-[0_4px_24px_rgba(0,0,0,0.12)] transition-opacity duration-200 ease-out"
 
       const dot = document.createElement("span")
-      Object.assign(dot.style, {
-        width: "8px",
-        height: "8px",
-        borderRadius: "50%",
-        background: "#16a34a",
-        flexShrink: "0",
-        display: "inline-block"
-      })
+      dot.className = "inline-block size-2 shrink-0 rounded-full bg-green-600"
 
       const label = document.createElement("span")
       label.setAttribute("data-inklink-count", "")
       label.textContent = `${count} Document${count !== 1 ? "s" : ""} captured`
 
       const doneBtn = document.createElement("button")
-      Object.assign(doneBtn.style, {
-        padding: "6px 14px",
-        borderRadius: "8px",
-        fontSize: "12px",
-        fontWeight: "600",
-        fontFamily: "'Outfit', sans-serif",
-        cursor: "pointer",
-        border: "none",
-        background: "#dc2626",
-        color: "#ffffff",
-        transition: "background 0.15s ease"
-      })
+      doneBtn.className =
+        "cursor-pointer rounded-lg border-0 bg-red-600 px-3.5 py-1.5 font-['Outfit',sans-serif] text-xs font-semibold text-white transition-colors duration-150 hover:bg-red-700"
       doneBtn.textContent = "Done Capturing"
-      doneBtn.onmouseenter = () => (doneBtn.style.background = "#b91c1c")
-      doneBtn.onmouseleave = () => (doneBtn.style.background = "#dc2626")
       doneBtn.onclick = () => {
         browser.runtime.sendMessage({ action: "doc:captureComplete" })
         badge?.remove()
@@ -365,162 +326,65 @@ export default defineContentScript({
 
       const backdrop = document.createElement("div")
       backdrop.id = MODAL_ID
-      Object.assign(backdrop.style, {
-        position: "fixed",
-        top: "0",
-        left: "0",
-        width: "100vw",
-        height: "100vh",
-        background: "rgba(15, 23, 42, 0.45)",
-        backdropFilter: "blur(4px)",
-        WebkitBackdropFilter: "blur(4px)",
-        zIndex: "2147483647",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontFamily: "'Outfit', sans-serif"
-      })
+      backdrop.className =
+        "fixed inset-0 z-[2147483647] flex items-center justify-center bg-slate-900/45 font-['Outfit',sans-serif] backdrop-blur-sm"
 
       const card = document.createElement("div")
-      Object.assign(card.style, {
-        background: "#ffffff",
-        borderRadius: "16px",
-        padding: "32px",
-        maxWidth: "400px",
-        width: "90%",
-        boxShadow:
-          "0 25px 50px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.05)",
-        textAlign: "center"
-      })
+      card.className =
+        "w-[90%] max-w-[400px] rounded-2xl border border-black/5 bg-white p-8 text-center shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25),0_0_0_1px_rgba(0,0,0,0.05)]"
 
       const iconWrap = document.createElement("div")
-      Object.assign(iconWrap.style, {
-        marginBottom: "20px",
-        display: "flex",
-        justifyContent: "center"
-      })
+      iconWrap.className = "mb-5 flex justify-center"
       iconWrap.innerHTML = SVG_DOC_ICON
 
       const title = document.createElement("div")
-      Object.assign(title.style, {
-        fontSize: "17px",
-        fontWeight: "600",
-        color: "#0f172a",
-        marginBottom: "4px",
-        letterSpacing: "-0.01em"
-      })
+      title.className =
+        "mb-1 text-[17px] font-semibold tracking-tight text-slate-900"
       title.textContent = "Document Detected"
 
       const subtitle = document.createElement("div")
-      Object.assign(subtitle.style, {
-        fontSize: "13px",
-        fontWeight: "400",
-        color: "#94a3b8",
-        marginBottom: "16px",
-        letterSpacing: "0.01em",
-        textTransform: "uppercase" as const
-      })
+      subtitle.className =
+        "mb-4 text-[13px] font-normal uppercase tracking-wide text-slate-400"
       subtitle.textContent = "InkLink"
 
       const fileLabel = document.createElement("div")
       fileLabel.id = "__inklink_doc_filename__"
-      Object.assign(fileLabel.style, {
-        fontSize: "13px",
-        color: "#475569",
-        marginBottom: "24px",
-        wordBreak: "break-all",
-        background: "#f8fafc",
-        border: "1px solid #e2e8f0",
-        padding: "10px 14px",
-        borderRadius: "8px",
-        fontFamily: "'Outfit', monospace",
-        fontWeight: "500",
-        textAlign: "left",
-        display: "flex",
-        alignItems: "center",
-        gap: "8px"
-      })
+      fileLabel.className =
+        "mb-6 flex items-center gap-2 break-all rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-left font-['Outfit',monospace] text-[13px] font-medium text-slate-600"
       const fileDot = document.createElement("span")
-      Object.assign(fileDot.style, {
-        width: "8px",
-        height: "8px",
-        borderRadius: "50%",
-        background: "#ef4444",
-        flexShrink: "0",
-        display: "inline-block"
-      })
+      fileDot.className = "inline-block size-2 shrink-0 rounded-full bg-red-500"
       fileLabel.appendChild(fileDot)
       fileLabel.appendChild(document.createTextNode(filename))
 
       const question = document.createElement("div")
-      Object.assign(question.style, {
-        fontSize: "14px",
-        color: "#64748b",
-        marginBottom: "24px",
-        fontWeight: "400",
-        lineHeight: "1.5"
-      })
+      question.className =
+        "mb-6 text-sm font-normal leading-normal text-slate-500"
       question.textContent =
         "Would you like to send this document for evaluation?"
 
       const btnRow = document.createElement("div")
-      Object.assign(btnRow.style, {
-        display: "flex",
-        gap: "10px"
-      })
+      btnRow.className = "flex gap-2.5"
 
       const yesBtn = document.createElement("button")
-      Object.assign(yesBtn.style, {
-        flex: "1",
-        padding: "11px 20px",
-        borderRadius: "10px",
-        fontSize: "13px",
-        fontWeight: "600",
-        fontFamily: "'Outfit', sans-serif",
-        cursor: "pointer",
-        border: "none",
-        background: "#dc2626",
-        color: "#ffffff",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: "8px",
-        transition: "all 0.15s ease"
-      })
+      yesBtn.className =
+        "flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-[10px] border-0 bg-red-600 px-5 py-[11px] font-['Outfit',sans-serif] text-[13px] font-semibold text-white transition-all duration-150 hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-70"
       yesBtn.innerHTML = `${SVG_UPLOAD_ICON} Send`
-      yesBtn.onmouseenter = () => (yesBtn.style.background = "#b91c1c")
-      yesBtn.onmouseleave = () => (yesBtn.style.background = "#dc2626")
+
+      const noBtn = document.createElement("button")
+      noBtn.className =
+        "flex-1 cursor-pointer rounded-[10px] border border-slate-200 bg-white px-5 py-[11px] font-['Outfit',sans-serif] text-[13px] font-semibold text-slate-500 transition-all duration-150 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+      noBtn.textContent = "Skip"
+
       yesBtn.onclick = () => {
         yesBtn.disabled = true
         noBtn.disabled = true
         yesBtn.innerHTML = `${SVG_SPINNER} Sending`
-        yesBtn.style.opacity = "0.7"
-        yesBtn.style.cursor = "default"
-        noBtn.style.opacity = "0.4"
-        noBtn.style.cursor = "default"
         browser.runtime.sendMessage({
           action: "doc:confirm",
           payload: { url, filename }
         })
       }
 
-      const noBtn = document.createElement("button")
-      Object.assign(noBtn.style, {
-        flex: "1",
-        padding: "11px 20px",
-        borderRadius: "10px",
-        fontSize: "13px",
-        fontWeight: "600",
-        fontFamily: "'Outfit', sans-serif",
-        cursor: "pointer",
-        border: "1px solid #e2e8f0",
-        background: "#ffffff",
-        color: "#64748b",
-        transition: "all 0.15s ease"
-      })
-      noBtn.textContent = "Skip"
-      noBtn.onmouseenter = () => (noBtn.style.background = "#f8fafc")
-      noBtn.onmouseleave = () => (noBtn.style.background = "#ffffff")
       noBtn.onclick = () => {
         browser.runtime.sendMessage({
           action: "doc:cancel",
@@ -549,40 +413,19 @@ export default defineContentScript({
       if (!card) return
 
       card.innerHTML = ""
-      Object.assign(card.style, {
-        background: "#ffffff",
-        borderRadius: "16px",
-        padding: "36px 32px",
-        maxWidth: "400px",
-        width: "90%",
-        boxShadow:
-          "0 25px 50px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.05)",
-        textAlign: "center"
-      })
+      card.className =
+        "w-[90%] max-w-[400px] rounded-2xl border border-black/5 bg-white px-8 py-9 text-center shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25),0_0_0_1px_rgba(0,0,0,0.05)]"
 
       const iconWrap = document.createElement("div")
-      Object.assign(iconWrap.style, {
-        marginBottom: "16px",
-        display: "flex",
-        justifyContent: "center"
-      })
+      iconWrap.className = "mb-4 flex justify-center"
       iconWrap.innerHTML = SVG_CHECK_ICON
 
       const msg = document.createElement("div")
-      Object.assign(msg.style, {
-        fontSize: "15px",
-        fontWeight: "600",
-        color: "#0f172a",
-        marginBottom: "4px"
-      })
+      msg.className = "mb-1 text-[15px] font-semibold text-slate-900"
       msg.textContent = "Sent for evaluation"
 
       const sub = document.createElement("div")
-      Object.assign(sub.style, {
-        fontSize: "13px",
-        fontWeight: "400",
-        color: "#94a3b8"
-      })
+      sub.className = "text-[13px] font-normal text-slate-400"
       sub.textContent = "This document has been submitted successfully."
 
       card.appendChild(iconWrap)
