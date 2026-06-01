@@ -1,6 +1,7 @@
 //activate recorder service:
-// import { createProxyService } from "@webext-core/proxy-service"
-// const recorderService = createProxyService(RECORDER_SERVICE_KEY)
+import { createProxyService } from "@webext-core/proxy-service"
+
+const recorderService = createProxyService(RECORDER_SERVICE_KEY)
 
 /**
  * Records user interactions (click, fill, select) and produces a JSON trace
@@ -246,20 +247,20 @@ function onCaptureClick(e: MouseEvent) {
   const description = getClickDescription(actionable)
   const xpath = getXPath(actionable)
   console.log("onCaptureClick", selector, xpath, description)
-  // recorderService.recorderEvent({
-  //   kind: "click",
-  //   selector,
-  //   xpath,
-  //   url: getUrl(),
-  //   description: description || undefined
-  // })
-  sendEvent({
+  recorderService.recorderEvent({
     kind: "click",
     selector,
     xpath,
     url: getUrl(),
     description: description || undefined
   })
+  // sendEvent({
+  //   kind: "click",
+  //   selector,
+  //   xpath,
+  //   url: getUrl(),
+  //   description: description || undefined
+  // })
 }
 
 /** Fill: record only on blur or Enter (not every keystroke). Debounce to avoid duplicate when both fire. */

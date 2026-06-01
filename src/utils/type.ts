@@ -198,3 +198,10 @@ export type DocConfirmPayload = {
   url: string
   filename: string
 }
+
+export type DocConfirmation = {
+  url: string
+  filename: string
+  downloadId?: number
+  blob?: Blob
+}

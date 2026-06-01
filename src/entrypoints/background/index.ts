@@ -1,5 +1,5 @@
 import { RECORDER_SERVICE_KEY } from "@/utils/proxy-service-keys"
-import { RecorderService } from "@/utils/services"
+import { RecorderService } from "@/utils/recorder-service"
 import { registerService } from "@webext-core/proxy-service"
 import { initializeApp } from "firebase/app"
 import { getFirestore } from "firebase/firestore"
@@ -20,18 +20,18 @@ import {
 
 // main function
 export default defineBackground(() => {
-  const SETUP_SESSION_URL = import.meta.env.WXT_PUBLIC_SETUP_SESSION_URL
+  const SETUP_SESSION_URL = import.meta.env.WXT_PUBLIC_SETUP_SESSION_URL //added
   console.log(SETUP_SESSION_URL)
 
   // activate when recorder services are ready
   // const recorderService = new RecorderService()
   // registerService(RECORDER_SERVICE_KEY, recorderService)
 
-  let sessionInitialized = false
-  let globalSessionId = "no-session-id"
-  let globalSendCommMsg: (data: CommDocMessage) => void
+  let sessionInitialized = false //added
+  let globalSessionId = "no-session-id" //added
+  let globalSendCommMsg: (data: CommDocMessage) => void //added
 
-  // Recording state for Playwright replay (starts recording by default)
+  // Recording state for Playwright replay (starts recording by default) TODO: add these
   let recordingActive = true
   let recordingTabId: number | null = null
   let recordedSteps: RecordedStep[] = []
@@ -208,6 +208,7 @@ export default defineBackground(() => {
       return true
     }
 
+    //content
     if (message.action === "doc:cancel") {
       const { url } = message.payload
       pendingDocConfirmations.delete(url)
@@ -216,12 +217,14 @@ export default defineBackground(() => {
       return false
     }
 
+    //content
     if (message.action === "doc:captureComplete") {
       globalSendCommMsg({ action: "doc_capture_done" })
       sendResponse({ ok: true })
       return false
     }
 
+    //content
     if (message === "content_script:setupSessionInfo()") {
       if (!sessionInitialized && sender.url?.startsWith(SETUP_SESSION_URL)) {
         const redirectUrl =
@@ -229,7 +232,6 @@ export default defineBackground(() => {
           "https://www.google.com"
         const sessionId =
           new URL(sender.url).searchParams.get("sid") || "no-sessionId"
-
         const redirectMsg = { action: "redirect", payload: redirectUrl }
         const setupTabId = sender.tab?.id
         if (setupTabId != null) {
@@ -244,8 +246,10 @@ export default defineBackground(() => {
         globalSendCommMsg({ action: "session_initialized" })
       }
       sendResponse(globalSessionId)
+      // ?
     } else if (message === "content_script:pwd_input_found") {
       globalSendCommMsg({ action: "pwd_input_found" })
+      // ?
     } else if (
       message.action &&
       message.action === "popup:analyzeCurrentTab()"
@@ -323,7 +327,7 @@ export default defineBackground(() => {
     }
   }
 
-  const alreadyDetectedDocs = new Set<string>()
+  const alreadyDetectedDocs = new Set<string>() //added
 
   async function tabsOnUpdatedListener(
     tabId: number,
