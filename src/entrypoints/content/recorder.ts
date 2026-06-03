@@ -1,3 +1,8 @@
+//activate recorder service:
+import { createProxyService } from "@webext-core/proxy-service"
+
+const recorderService = createProxyService(BACKGROUND_SERVICE_KEY)
+
 /**
  * Records user interactions (click, fill, select) and produces a JSON trace
  * that can be replayed with Playwright.
@@ -220,31 +225,6 @@ function getActionableClickElement(el: Element | null): Element | null {
   return null
 }
 
-export type RecorderEvent =
-  | {
-      kind: "click"
-      selector: string
-      xpath: string
-      url: string
-      description?: string
-    }
-  | {
-      kind: "fill"
-      selector: string
-      xpath: string
-      value: string
-      url: string
-      description?: string
-    }
-  | {
-      kind: "select"
-      selector: string
-      xpath: string
-      value: string
-      url: string
-      description?: string
-    }
-
 let recording = false
 let listenersAttached = false
 
@@ -267,13 +247,20 @@ function onCaptureClick(e: MouseEvent) {
   const description = getClickDescription(actionable)
   const xpath = getXPath(actionable)
   console.log("onCaptureClick", selector, xpath, description)
-  sendEvent({
+  recorderService.recorderEvent({
     kind: "click",
     selector,
     xpath,
     url: getUrl(),
     description: description || undefined
   })
+  // sendEvent({
+  //   kind: "click",
+  //   selector,
+  //   xpath,
+  //   url: getUrl(),
+  //   description: description || undefined
+  // })
 }
 
 /** Fill: record only on blur or Enter (not every keystroke). Debounce to avoid duplicate when both fire. */

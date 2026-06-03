@@ -1,3 +1,5 @@
+import { createProxyService } from "@webext-core/proxy-service"
+
 import { injectKioskPageOverrides } from "./kiosk"
 import { startRecording, stopRecording } from "./recorder"
 
@@ -12,6 +14,7 @@ export default defineContentScript({
   matches: ["<all_urls>"],
   runAt: "document_start",
   main(ctx) {
+    const bgService = createProxyService(BACKGROUND_SERVICE_KEY)
     remoteLog("content script init", "info")
     injectKioskPageOverrides()
     let foundPasswordInputs = false
@@ -32,33 +35,16 @@ export default defineContentScript({
       const passwordInputs = document.querySelectorAll('input[type="password"]')
       if (passwordInputs.length > 0) {
         foundPasswordInputs = true
-        browser.runtime.sendMessage("content_script:pwd_input_found")
+        bgService.pwdInputFound()
       }
     }
 
     function setupSessionInfo() {
-      browser.runtime.sendMessage(
-        "content_script:setupSessionInfo()",
-        (response) => {
-          remoteLog(
-            "content_script:setupSessionInfo() called. service_worker response with:",
-            "info",
-            response
-          )
-
-          if (browser.runtime.lastError) {
-            remoteLog(
-              "received chrome.runtime.lastError:",
-              "error",
-              browser.runtime.lastError as Record<string, unknown>
-            )
-          } else if (response.error) {
-            remoteLog("received response.error:", "error", {
-              error: response.error?.message
-            })
-          }
-        }
-      )
+      bgService.setupSessionInfo(window.location.href).catch((error) => {
+        remoteLog("received response.error:", "error", {
+          error: error.message
+        })
+      })
     }
 
     browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -347,7 +333,7 @@ export default defineContentScript({
       doneBtn.onmouseenter = () => (doneBtn.style.background = "#b91c1c")
       doneBtn.onmouseleave = () => (doneBtn.style.background = "#dc2626")
       doneBtn.onclick = () => {
-        browser.runtime.sendMessage({ action: "doc:captureComplete" })
+        bgService.docCaptureComplete()
         badge?.remove()
       }
 
@@ -496,10 +482,7 @@ export default defineContentScript({
         yesBtn.style.cursor = "default"
         noBtn.style.opacity = "0.4"
         noBtn.style.cursor = "default"
-        browser.runtime.sendMessage({
-          action: "doc:confirm",
-          payload: { url, filename }
-        })
+        bgService.docConfirm({ url, filename })
       }
 
       const noBtn = document.createElement("button")
@@ -520,10 +503,7 @@ export default defineContentScript({
       noBtn.onmouseenter = () => (noBtn.style.background = "#f8fafc")
       noBtn.onmouseleave = () => (noBtn.style.background = "#ffffff")
       noBtn.onclick = () => {
-        browser.runtime.sendMessage({
-          action: "doc:cancel",
-          payload: { url }
-        })
+        bgService.docCancel(url)
         removeDocModal()
       }
 
