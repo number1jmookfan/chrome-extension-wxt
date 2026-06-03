@@ -1,16 +1,18 @@
 import { initializeApp } from "firebase/app"
 import { getFirestore } from "firebase/firestore"
 
+import { RecordedStep } from "../type"
 import { initCommChannel } from "./comm"
 import {
   captureFullPage,
   captureVisibleScreen,
   getActiveTab,
   sendMessagetoActiveTab,
+  sendToBrowserDataAPI,
   sendToCaptureAPI
 } from "./utils"
 
-export class DocServices {
+export class BackgroundServices {
   private SETUP_SESSION_URL = import.meta.env.WXT_PUBLIC_SETUP_SESSION_URL
   private sessionInitialized = false
   private globalSessionId = "no-session-id"
@@ -24,6 +26,11 @@ export class DocServices {
   private docUploadCount = 0
 
   private alreadyDetectedDocs = new Set<String>()
+
+  private recordingActive = true
+  private recordingTabId: number | null = null
+  private recordedSteps: RecordedStep[] = []
+  private recordingStartedAt = ""
 
   constructor() {
     browser.storage.local.get(
@@ -111,25 +118,30 @@ export class DocServices {
     return false
   }
 
-  setupSessionInfo(url: string, tabId?: number) {
+  setupSessionInfo(url: string, tabId?: number): string | void {
     if (!this.sessionInitialized && url.startsWith(this.SETUP_SESSION_URL)) {
       const redirectUrl =
         new URL(url).searchParams.get("redirectUrl") || "https://www.google.com"
       const sessionId = new URL(url).searchParams.get("sid") || "no-sessionId"
 
       const redirectMsg = { action: "redirect", payload: redirectUrl }
-      if (tabId != null) {
-        browser.tabs.sendMessage(tabId, redirectMsg).catch(() => {
-          sendMessagetoActiveTab(redirectMsg)
-        })
-      } else {
-        sendMessagetoActiveTab(redirectMsg)
-      }
+      // if (tabId != null) {
+      //   browser.tabs.sendMessage(tabId, redirectMsg).catch(() => {
+      //     sendMessagetoActiveTab(redirectMsg)
+      //   })
+      // } else {
+      //   sendMessagetoActiveTab(redirectMsg)
+      // }
+      sendMessagetoActiveTab(redirectMsg)
       this.initSession(sessionId)
       this.setupCommChannel(sessionId)
       this.globalSendCommMsg!({ action: "session_initialized" })
     }
     return this.globalSessionId
+  }
+
+  pwdInputFound() {
+    this.globalSendCommMsg!({ action: "pwd_input_found" })
   }
 
   //helper methods
@@ -193,28 +205,27 @@ export class DocServices {
     }
   }
 
-  private async analyzeCurrentTab(fullpage: boolean) {
+  async analyzeCurrentTab(fullpage: boolean) {
     remoteLog("init: analyzeCurrentTab", "info", { fullpage })
     const startTime = Date.now()
 
     const activeTab = await getActiveTab()
     const currentTabUrl = activeTab?.url || "unknown"
 
-    //TODO: add recording
-    // if (recordingActive) {
-    //   recordedSteps.push({
-    //     type: "analyze",
-    //     pageUrl: currentTabUrl,
-    //     fullPage: fullpage,
-    //     timestamp: Date.now()
-    //   })
-    //   const storageExport = await getStorageExport()
-    //   await sendToBrowserDataAPI({
-    //     session_id: globalSessionId,
-    //     rawEvent: JSON.stringify(recordedSteps),
-    //     storageExport
-    //   })
-    // }
+    if (this.recordingActive) {
+      this.recordedSteps.push({
+        type: "analyze",
+        pageUrl: currentTabUrl,
+        fullPage: fullpage,
+        timestamp: Date.now()
+      })
+      const storageExport = await this.getStorageExport()
+      await sendToBrowserDataAPI({
+        session_id: this.globalSessionId,
+        rawEvent: JSON.stringify(this.recordedSteps),
+        storageExport
+      })
+    }
 
     const screenshotDataUrl = fullpage
       ? await captureFullPage(activeTab?.id || null)
@@ -240,6 +251,69 @@ export class DocServices {
     remoteLog("init: sessionId initialized from content.ts", "info", {
       sessionId: this.globalSessionId
     })
+  }
+
+  //recorder
+  async recorderEvent(payload: RecorderEvent): Promise<boolean> {
+    const { kind, selector, xpath, url, value, description } = payload
+    remoteLog("recorder:event, " + kind, "info")
+    if (this.recordingActive) {
+      const base = {
+        selector,
+        xpath,
+        pageUrl: url,
+        timestamp: Date.now(),
+        description
+      }
+      if (kind === "click") {
+        this.recordedSteps.push({ type: "click", ...base })
+        return true
+      } else if (kind === "fill") {
+        this.recordedSteps.push({ type: "fill", ...base, value })
+        return true
+      } else if (kind === "select") {
+        this.recordedSteps.push({ type: "select", ...base, value })
+        return true
+      }
+    }
+    return false
+  }
+
+  public async getStorageExport(): Promise<StorageExport> {
+    const cookies = await new Promise<Browser.cookies.Cookie[]>((resolve) =>
+      browser.cookies.getAll({}, resolve)
+    )
+    const exportCookies: StorageExportCookie[] = cookies.map((c) => ({
+      name: c.name,
+      value: c.value,
+      domain: c.domain,
+      path: c.path,
+      expires: c.expirationDate ?? -1,
+      httpOnly: c.httpOnly,
+      secure: c.secure,
+      sameSite: (() => {
+        const s = c.sameSite
+        if (s === "no_restriction") return "None"
+        if (s === "lax") return "Lax"
+        if (s === "strict") return "Strict"
+        return "Lax"
+      })() as StorageExportCookie["sameSite"]
+    }))
+
+    let origins: StorageExportOrigin[] = []
+    const activeTab = await getActiveTab()
+    if (activeTab?.id && activeTab.url?.startsWith("http")) {
+      try {
+        const resp = await browser.tabs.sendMessage(activeTab.id, {
+          action: "storage:getLocalStorage"
+        })
+        origins = resp?.origins ?? []
+      } catch {
+        // Content script may not be loaded (e.g. chrome://, extension pages)
+      }
+    }
+
+    return { cookies: exportCookies, origins }
   }
 
   //getters and setters
@@ -291,6 +365,9 @@ export class DocServices {
   hasPendingDocConfirmation(key: string): boolean {
     return this.pendingDocConfirmations.has(key)
   }
+  pendingDocConfirmationSize(): number {
+    return this.pendingDocConfirmations.size
+  }
 
   getDocUploadCount(): number {
     return this.docUploadCount
@@ -326,5 +403,39 @@ export class DocServices {
   // Utility: get the count of detected docs
   countAlreadyDetectedDocs(): number {
     return this.alreadyDetectedDocs.size
+  }
+
+  getRecordingActive(): boolean {
+    return this.recordingActive
+  }
+  setRecordingActive(value: boolean) {
+    this.recordingActive = value
+  }
+  getRecordingTabId(): number | null {
+    return this.recordingTabId
+  }
+  setRecordingTabId(value: number | null) {
+    this.recordingTabId = value
+  }
+  pushRecordedStep(step: RecordedStep): void {
+    this.recordedSteps.push(step)
+  }
+  popRecordedStep(): RecordedStep | undefined {
+    return this.recordedSteps.pop()
+  }
+  recordedStepsCount(): number {
+    return this.recordedSteps.length
+  }
+  resetRecordedSteps(): void {
+    this.recordedSteps = []
+  }
+  getAllRecordedSteps(): RecordedStep[] {
+    return structuredClone(this.recordedSteps)
+  }
+  getRecordingStartTime(): string {
+    return this.recordingStartedAt
+  }
+  setRecordingStartTime(value: string) {
+    this.recordingStartedAt = value
   }
 }

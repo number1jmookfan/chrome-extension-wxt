@@ -1,6 +1,5 @@
 const PAGE_VISIT_API_URL = import.meta.env.WXT_PUBLIC_PAGE_VISIT_API_URL
 const CAPTURE_API_URL = import.meta.env.WXT_PUBLIC_CAPTURE_API_URL
-const BROWSER_DATA_API_URL = import.meta.env.WXT_PUBLIC_BROWSER_DATA_API_URL
 const DOC_UPLOAD_API_URL = import.meta.env.WXT_PUBLIC_DOC_UPLOAD_API_URL
 
 export async function getActiveTabUrl(): Promise<string> {
@@ -66,23 +65,6 @@ export async function captureVisibleScreen() {
     quality: 80
   })
   return screenshotDataUrl
-}
-
-export async function sendToBrowserDataAPI(data: BrowserDataApiReq) {
-  try {
-    await fetch(BROWSER_DATA_API_URL, {
-      headers: new Headers({
-        "ngrok-skip-browser-warning": "69420"
-      }),
-      method: "POST",
-      body: JSON.stringify(data)
-    })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error"
-    remoteLog("sendToBrowserDataAPI failed", "error", {
-      error: message
-    })
-  }
 }
 
 export async function sendToCaptureAPI({
@@ -260,4 +242,25 @@ async function stitchScreenshots(
     reader.onerror = reject
     reader.readAsDataURL(blob)
   })
+}
+
+export function isDocUrl(url: string): boolean {
+  if (!url) return false
+  try {
+    const pathname = new URL(url).pathname
+    return pathname.toLowerCase().endsWith(".pdf")
+  } catch {
+    return false
+  }
+}
+
+export function getFilenameFromUrl(url: string): string {
+  try {
+    const pathname = new URL(url).pathname
+    const parts = pathname.split("/")
+    const raw = parts[parts.length - 1] || "document.pdf"
+    return decodeURIComponent(raw)
+  } catch {
+    return "document.pdf"
+  }
 }

@@ -1,6 +1,6 @@
 import type { ProxyServiceKey } from "@webext-core/proxy-service"
 
-import type { RecorderService } from "./recorder-service"
+import type { BackgroundServices } from "./bg-service/bg-service"
 
-export const RECORDER_SERVICE_KEY =
-  "recorder-service" as ProxyServiceKey<RecorderService>
+export const BACKGROUND_SERVICE_KEY =
+  "recorder-service" as ProxyServiceKey<BackgroundServices>

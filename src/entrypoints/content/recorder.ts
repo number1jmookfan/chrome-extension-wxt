@@ -1,7 +1,7 @@
 //activate recorder service:
 import { createProxyService } from "@webext-core/proxy-service"
 
-const recorderService = createProxyService(RECORDER_SERVICE_KEY)
+const recorderService = createProxyService(BACKGROUND_SERVICE_KEY)
 
 /**
  * Records user interactions (click, fill, select) and produces a JSON trace

@@ -1,69 +1,21 @@
-import { RECORDER_SERVICE_KEY } from "@/utils/proxy-service-keys"
-import { RecorderService } from "@/utils/recorder-service"
+import { BackgroundServices } from "@/utils/bg-service/bg-service"
+import { BACKGROUND_SERVICE_KEY } from "@/utils/proxy-service-keys"
 import { registerService } from "@webext-core/proxy-service"
-import { initializeApp } from "firebase/app"
-import { getFirestore } from "firebase/firestore"
 import { browser, type Browser } from "wxt/browser"
 
-import { initCommChannel } from "./comm"
 import { setupKioskBackgroundGuard } from "./kiosk"
 import {
-  captureFullPage,
-  captureVisibleScreen,
   getActiveTab,
-  sendDocToServer,
+  getFilenameFromUrl,
+  isDocUrl,
   sendMessagetoActiveTab,
-  sendToBrowserDataAPI,
-  sendToCaptureAPI,
   sendToPageVisitAPI
 } from "./utils"
 
 // main function
 export default defineBackground(() => {
-  const SETUP_SESSION_URL = import.meta.env.WXT_PUBLIC_SETUP_SESSION_URL //added
-  console.log(SETUP_SESSION_URL)
-
-  // activate when recorder services are ready
-  // const recorderService = new RecorderService()
-  // registerService(RECORDER_SERVICE_KEY, recorderService)
-
-  let sessionInitialized = false //added
-  let globalSessionId = "no-session-id" //added
-  let globalSendCommMsg: (data: CommDocMessage) => void //added
-
-  // Recording state for Playwright replay (starts recording by default) TODO: add these
-  let recordingActive = true
-  let recordingTabId: number | null = null
-  let recordedSteps: RecordedStep[] = []
-  let recordingStartedAt = ""
-
-  // Document detection state
-  const pendingDocConfirmations = new Map<
-    string,
-    { url: string; filename: string; downloadId?: number; blob?: Blob }
-  >()
-  let docUploadCount = 0
-
-  browser.storage.local.get(["sessionId"], (result: { sessionId?: string }) => {
-    if (result.sessionId) {
-      globalSessionId = result.sessionId
-      sessionInitialized = true
-      remoteLog("init: sessionId from storage", "info", {
-        sessionId: globalSessionId
-      })
-      setupCommChannel(globalSessionId)
-    } else {
-      remoteLog("sessionId not found in storage", "info")
-    }
-  })
-
-  const app = initializeApp({
-    apiKey: import.meta.env.WXT_PUBLIC_FIREBASE_API_KEY,
-    projectId: import.meta.env.WXT_PUBLIC_FIREBASE_PROJECT_ID,
-    appId: import.meta.env.WXT_PUBLIC_FIREBASE_APP_ID,
-    measurementId: import.meta.env.WXT_PUBLIC_FIREBASE_MEASUREMENT_ID
-  })
-  const db = getFirestore(app)
+  const bgServices = new BackgroundServices()
+  registerService(BACKGROUND_SERVICE_KEY, bgServices)
 
   function runtimeMessageListener(
     message: any,
@@ -82,8 +34,8 @@ export default defineBackground(() => {
 
     //popup
     if (message.action === "recorder:stop") {
-      recordingActive = false
-      recordingTabId = null
+      bgServices.setRecordingActive(false)
+      bgServices.setRecordingTabId(null)
       browser.storage.local.set({ recorderActive: false })
       sendMessagetoActiveTab({ action: "recorder:stop" })
       sendResponse({ ok: true })
@@ -98,33 +50,11 @@ export default defineBackground(() => {
       return true
     }
 
-    //content
-    if (message.action === "recorder:event" && message.payload) {
-      const { kind, selector, xpath, url, value, description } = message.payload
-      console.log("recorder:event", message.payload)
-      if (recordingActive) {
-        const base = {
-          selector,
-          xpath,
-          pageUrl: url,
-          timestamp: Date.now(),
-          description
-        }
-        if (kind === "click") recordedSteps.push({ type: "click", ...base })
-        else if (kind === "fill")
-          recordedSteps.push({ type: "fill", ...base, value })
-        else if (kind === "select")
-          recordedSteps.push({ type: "select", ...base, value })
-      }
-      sendResponse({ ok: true })
-      return false
-    }
-
     //popup
     if (message.action === "recorder:getRecording") {
       const recording: Recording = {
-        steps: [...recordedSteps],
-        startedAt: recordingStartedAt,
+        steps: bgServices.getAllRecordedSteps(),
+        startedAt: bgServices.getRecordingStartTime(),
         metadata: {}
       }
       sendResponse(recording)
@@ -135,7 +65,7 @@ export default defineBackground(() => {
     if (message.action === "storage:getExport") {
       ;(async () => {
         try {
-          const exportData = await getStorageExport()
+          const exportData = await bgServices.getStorageExport()
           sendResponse({ ok: true, data: exportData })
         } catch (error) {
           const message =
@@ -148,186 +78,7 @@ export default defineBackground(() => {
       })()
       return true
     }
-
-    //content
-    if (message.action === "doc:confirm") {
-      ;(async () => {
-        try {
-          const { url, filename } = message.payload
-          const pending = pendingDocConfirmations.get(url)
-          const finalFilename = pending?.filename || filename || "document.pdf"
-
-          // Use pre-fetched blob if available, otherwise fetch now
-          let blob = pending?.blob
-          if (!blob) {
-            remoteLog("No pre-fetched blob, fetching now", "info", { url })
-            const response = await fetch(url, {
-              headers: new Headers({
-                "ngrok-skip-browser-warning": "69420"
-              }),
-              credentials: "include"
-            })
-            blob = await response.blob()
-          }
-
-          await sendDocToServer(blob, {
-            session_id: globalSessionId,
-            source_url: url,
-            filename: finalFilename
-          })
-
-          pendingDocConfirmations.delete(url)
-          docUploadCount++
-
-          // Notify content script of success + update badge
-          const activeTab = await getActiveTab()
-          if (activeTab?.id) {
-            try {
-              await browser.tabs.sendMessage(activeTab.id, {
-                action: "doc:sent"
-              })
-              await browser.tabs.sendMessage(activeTab.id, {
-                action: "doc:updateBadge",
-                payload: { count: docUploadCount }
-              })
-            } catch {
-              // Content script may not be available
-            }
-          }
-          sendResponse({ ok: true })
-        } catch (error) {
-          const errMessage =
-            error instanceof Error ? error.message : "Unknown error"
-          remoteLog("doc:confirm failed", "error", {
-            error: errMessage
-          })
-          pendingDocConfirmations.delete(message.payload?.url)
-          sendResponse({ ok: false, error: errMessage })
-        }
-      })()
-      return true
-    }
-
-    //content
-    if (message.action === "doc:cancel") {
-      const { url } = message.payload
-      pendingDocConfirmations.delete(url)
-      alreadyDetectedDocs.delete(url)
-      sendResponse({ ok: true })
-      return false
-    }
-
-    //content
-    if (message.action === "doc:captureComplete") {
-      globalSendCommMsg({ action: "doc_capture_done" })
-      sendResponse({ ok: true })
-      return false
-    }
-
-    //content
-    if (message === "content_script:setupSessionInfo()") {
-      if (!sessionInitialized && sender.url?.startsWith(SETUP_SESSION_URL)) {
-        const redirectUrl =
-          new URL(sender.url).searchParams.get("redirectUrl") ||
-          "https://www.google.com"
-        const sessionId =
-          new URL(sender.url).searchParams.get("sid") || "no-sessionId"
-        const redirectMsg = { action: "redirect", payload: redirectUrl }
-        const setupTabId = sender.tab?.id
-        if (setupTabId != null) {
-          browser.tabs.sendMessage(setupTabId, redirectMsg).catch(() => {
-            sendMessagetoActiveTab(redirectMsg)
-          })
-        } else {
-          sendMessagetoActiveTab(redirectMsg)
-        }
-        initSession(sessionId)
-        setupCommChannel(sessionId)
-        globalSendCommMsg({ action: "session_initialized" })
-      }
-      sendResponse(globalSessionId)
-      // ?
-    } else if (message === "content_script:pwd_input_found") {
-      globalSendCommMsg({ action: "pwd_input_found" })
-      // ?
-    } else if (
-      message.action &&
-      message.action === "popup:analyzeCurrentTab()"
-    ) {
-      analyzeCurrentTab(false)
-    }
   }
-
-  async function analyzeCurrentTab(fullpage: boolean) {
-    remoteLog("init: analyzeCurrentTab", "info", { fullpage })
-    const startTime = Date.now()
-
-    const activeTab = await getActiveTab()
-    const currentTabUrl = activeTab?.url || "unknown"
-
-    if (recordingActive) {
-      recordedSteps.push({
-        type: "analyze",
-        pageUrl: currentTabUrl,
-        fullPage: fullpage,
-        timestamp: Date.now()
-      })
-      const storageExport = await getStorageExport()
-      await sendToBrowserDataAPI({
-        session_id: globalSessionId,
-        rawEvent: JSON.stringify(recordedSteps),
-        storageExport
-      })
-    }
-
-    const screenshotDataUrl = fullpage
-      ? await captureFullPage(activeTab?.id || null)
-      : await captureVisibleScreen()
-
-    await sendToCaptureAPI({
-      session_id: globalSessionId,
-      source_url: currentTabUrl,
-      image_data_url: screenshotDataUrl as string
-    })
-
-    const endTime = Date.now()
-    const durationInSeconds = (endTime - startTime) / 1000
-    remoteLog("done: analyzeCurrentTab completed", "info", {
-      duration: durationInSeconds
-    })
-  }
-
-  function initSession(sessionId: string) {
-    globalSessionId = sessionId
-    sessionInitialized = true
-    browser.storage.local.set({ sessionId: globalSessionId })
-    remoteLog("init: sessionId initialized from content.ts", "info", {
-      sessionId: globalSessionId
-    })
-  }
-
-  function isDocUrl(url: string): boolean {
-    if (!url) return false
-    try {
-      const pathname = new URL(url).pathname
-      return pathname.toLowerCase().endsWith(".pdf")
-    } catch {
-      return false
-    }
-  }
-
-  function getFilenameFromUrl(url: string): string {
-    try {
-      const pathname = new URL(url).pathname
-      const parts = pathname.split("/")
-      const raw = parts[parts.length - 1] || "document.pdf"
-      return decodeURIComponent(raw)
-    } catch {
-      return "document.pdf"
-    }
-  }
-
-  const alreadyDetectedDocs = new Set<string>() //added
 
   async function tabsOnUpdatedListener(
     tabId: number,
@@ -338,18 +89,21 @@ export default defineBackground(() => {
       await sendToPageVisitAPI({
         tab_id: tabId,
         url: changeInfo?.url,
-        session_id: globalSessionId,
+        session_id: bgServices.getGlobalSessionId(),
         visited_at: Date.now()
       })
-      if (recordingActive && tabId === recordingTabId) {
+      if (
+        bgServices.getRecordingActive() &&
+        tabId === bgServices.getRecordingTabId()
+      ) {
         recordGoto(changeInfo.url)
       }
     }
-    if (recordingActive && changeInfo?.status === "complete") {
+    if (bgServices.getRecordingActive() && changeInfo?.status === "complete") {
       try {
         await browser.tabs.sendMessage(tabId, { action: "recorder:start" })
-        if (recordingTabId === null) {
-          recordingTabId = tabId
+        if (bgServices.getRecordingTabId() === null) {
+          bgServices.setRecordingTabId(tabId)
           recordGoto(tab?.url ?? "", "Start recording")
         }
       } catch {
@@ -359,7 +113,7 @@ export default defineBackground(() => {
 
     // Document detection: when a tab finishes loading
     if (changeInfo?.status === "complete" && tab?.url?.startsWith("http")) {
-      if (alreadyDetectedDocs.has(tab.url)) return
+      if (bgServices.hasAlreadyDetectedDoc(tab.url)) return
 
       let isDoc = isDocUrl(tab.url)
 
@@ -395,7 +149,7 @@ export default defineBackground(() => {
       }
 
       if (isDoc) {
-        alreadyDetectedDocs.add(tab.url)
+        bgServices.addAlreadyDetectedDoc(tab.url)
         let filename = isDocUrl(tab.url)
           ? getFilenameFromUrl(tab.url)
           : "document.pdf"
@@ -418,7 +172,10 @@ export default defineBackground(() => {
           }
         }
 
-        pendingDocConfirmations.set(tab.url, { url: tab.url, filename })
+        bgServices.setPendingDocConfirmation(tab.url, {
+          url: tab.url,
+          filename
+        })
 
         // Show modal on the user's active tab, not the document tab
         await showDocModalInAnyTab(tab.url, filename)
@@ -530,30 +287,9 @@ export default defineBackground(() => {
     }
   }
 
-  function setupCommChannel(sessionId: string) {
-    remoteLog("init: comm channel setup", "info", { sessionId })
-    const commChannel = initCommChannel(
-      db,
-      sessionId,
-      (doc: CommDocMessage) => {
-        if (doc.action === "capture_req") {
-          analyzeCurrentTab(false)
-        }
-        if (doc.action === "full_page_capture_req") {
-          analyzeCurrentTab(true)
-        }
-      }
-    )
-    if (commChannel) {
-      globalSendCommMsg = commChannel.sendCommMsg
-    } else {
-      throw new Error("failed to initialize comm channel - fatal")
-    }
-  }
-
   function recordGoto(pageUrl: string, description?: string) {
     if (!pageUrl?.startsWith("http")) return
-    recordedSteps.push({
+    bgServices.pushRecordedStep({
       type: "goto",
       pageUrl,
       timestamp: Date.now(),
@@ -562,14 +298,14 @@ export default defineBackground(() => {
   }
 
   function startRecording() {
-    recordingActive = true
+    bgServices.setRecordingActive(true)
     browser.storage.local.set({ recorderActive: true })
-    recordedSteps = []
-    docUploadCount = 0
-    recordingStartedAt = new Date().toISOString()
+    bgServices.resetRecordedSteps()
+    bgServices.resetDocUploadCount()
+    bgServices.setRecordingStartTime(new Date().toISOString())
     return getActiveTab()
       .then((tab) => {
-        if (tab?.id) recordingTabId = tab.id
+        if (tab?.id) bgServices.setRecordingTabId(tab.id)
         recordGoto(tab?.url ?? "", "Start recording")
         return sendMessagetoActiveTab({ action: "recorder:start" })
       })
@@ -578,57 +314,23 @@ export default defineBackground(() => {
       })
   }
 
-  async function getStorageExport(): Promise<StorageExport> {
-    const cookies = await new Promise<Browser.cookies.Cookie[]>((resolve) =>
-      browser.cookies.getAll({}, resolve)
-    )
-    const exportCookies: StorageExportCookie[] = cookies.map((c) => ({
-      name: c.name,
-      value: c.value,
-      domain: c.domain,
-      path: c.path,
-      expires: c.expirationDate ?? -1,
-      httpOnly: c.httpOnly,
-      secure: c.secure,
-      sameSite: (() => {
-        const s = c.sameSite
-        if (s === "no_restriction") return "None"
-        if (s === "lax") return "Lax"
-        if (s === "strict") return "Strict"
-        return "Lax"
-      })() as StorageExportCookie["sameSite"]
-    }))
-
-    let origins: StorageExportOrigin[] = []
-    const activeTab = await getActiveTab()
-    if (activeTab?.id && activeTab.url?.startsWith("http")) {
-      try {
-        const resp = await browser.tabs.sendMessage(activeTab.id, {
-          action: "storage:getLocalStorage"
-        })
-        origins = resp?.origins ?? []
-      } catch {
-        // Content script may not be loaded (e.g. chrome://, extension pages)
-      }
-    }
-
-    return { cookies: exportCookies, origins }
-  }
-
   // chrome sets persist = false by default hence we don't need to explicitly remove listeners
   // chrome.action.onClicked.addListener(analyzeCurrentTab)
   browser.tabs.onUpdated.addListener(tabsOnUpdatedListener)
   browser.tabs.onRemoved.addListener((closedTabId) => {
-    if (closedTabId === recordingTabId) recordingTabId = null
+    if (closedTabId === bgServices.getRecordingTabId())
+      bgServices.setRecordingTabId(null)
   })
   browser.runtime.onMessage.addListener(runtimeMessageListener)
 
   // Re-show pending doc modal when the user switches tabs
   browser.tabs.onActivated.addListener(async (activeInfo) => {
-    if (pendingDocConfirmations.size === 0) return
+    if (bgServices.pendingDocConfirmationSize() === 0) return
 
     // Get the first pending confirmation (most recent)
-    const [url, pending] = [...pendingDocConfirmations.entries()].pop()!
+    const [url, pending] = [
+      ...bgServices.getAllPendingDocConfirmations()
+    ].pop()!
 
     try {
       await browser.tabs.sendMessage(activeInfo.tabId, {
@@ -675,14 +377,14 @@ export default defineBackground(() => {
       filename,
       downloadId: downloadItem.id
     }
-    pendingDocConfirmations.set(docUrl, pending)
+    bgServices.setPendingDocConfirmation(docUrl, pending)
 
     // Fetch the doc blob immediately while the token/session is still valid
     fetch(docUrl, { credentials: "include" })
       .then((resp) => resp.blob())
       .then((blob) => {
         // Only store if still pending (user hasn't cancelled)
-        if (pendingDocConfirmations.has(docUrl)) {
+        if (bgServices.hasPendingDocConfirmation(docUrl)) {
           pending.blob = blob
           remoteLog("Doc blob pre-fetched", "info", {
             filename,
@@ -708,7 +410,9 @@ export default defineBackground(() => {
     if (!newName) return
 
     // Update any pending confirmation with the real filename
-    for (const [url, pending] of pendingDocConfirmations) {
+    for (const [url, pending] of [
+      ...bgServices.getAllPendingDocConfirmations()
+    ]) {
       if (pending.downloadId === delta.id) {
         const decoded = decodeURIComponent(newName)
         pending.filename = decoded
@@ -771,10 +475,10 @@ export default defineBackground(() => {
       url: docUrl,
       filename
     })
-    pendingDocConfirmations.delete(docUrl)
+    bgServices.deletePendingDocConfirmation(docUrl)
   }
 
-  setupKioskBackgroundGuard(SETUP_SESSION_URL)
+  setupKioskBackgroundGuard(bgServices.getSetupUrl())
 
   // refer to https://stackoverflow.com/a/66618269
   const keepAlive = () => setInterval(browser.runtime.getPlatformInfo, 20e3)
